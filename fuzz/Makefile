@@ -8,7 +8,8 @@ RUNNER		:= libfido2-runner
 PROFDATA	:= llvm-profdata
 COV		:= llvm-cov
 TARGETS		:= fuzz_assert fuzz_attobj fuzz_bio fuzz_cred fuzz_credman \
-		   fuzz_hid fuzz_largeblob fuzz_netlink fuzz_mgmt fuzz_pcsc
+		   fuzz_hid fuzz_largeblob fuzz_netlink fuzz_mgmt fuzz_pcsc \
+		   fuzz_resign
 CORPORA		:= $(foreach f,${TARGETS},${f}/corpus)
 MINIFY		:= $(foreach f,${TARGETS},/minify/${f}/corpus)
 REMOTE		:= gs://libfido2-corpus.clusterfuzz-external.appspot.com

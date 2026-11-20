@@ -36,6 +36,13 @@ set_target_properties(fuzz_assert PROPERTIES
 	LINKER_LANGUAGE ${FUZZ_LINKER_LANGUAGE})
 target_link_libraries(fuzz_assert fido2_shared)
 
+# fuzz_resign
+add_executable(fuzz_resign fuzz_resign.c ${COMMON_SOURCES} ${COMPAT_SOURCES})
+set_target_properties(fuzz_resign PROPERTIES
+	LINK_FLAGS ${FUZZ_LDFLAGS}
+	LINKER_LANGUAGE ${FUZZ_LINKER_LANGUAGE})
+target_link_libraries(fuzz_resign fido2_shared)
+
 # fuzz_mgmt
 add_executable(fuzz_mgmt fuzz_mgmt.c ${COMMON_SOURCES} ${COMPAT_SOURCES})
 set_target_properties(fuzz_mgmt PROPERTIES
