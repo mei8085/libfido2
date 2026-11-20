@@ -51,6 +51,8 @@ add_regress_test(regress_es384 SOURCES es384.c LIBS ${_FIDO2_LIBRARY})
 add_regress_test(regress_rs256 SOURCES rs256.c LIBS ${_FIDO2_LIBRARY})
 if(BUILD_STATIC_LIBS)
 	add_regress_test(regress_compress SOURCES compress.c LIBS fido2)
+	# exercises the internal CTAPHID reassembly parser (src/io.c)
+	add_regress_test(regress_hid SOURCES hid.c LIBS fido2)
 endif()
 
 if(MINGW)
