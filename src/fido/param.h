@@ -34,6 +34,11 @@
 #define CTAP_AUTHDATA_USER_VERIFIED	0x04
 #define CTAP_AUTHDATA_ATT_CRED		0x40
 #define CTAP_AUTHDATA_EXT_DATA		0x80
+/* Bits that may be set in the authenticator data flags byte; the
+ * remaining bits are reserved for future use and must be zero. */
+#define CTAP_AUTHDATA_FLAGS_MASK					      \
+	(CTAP_AUTHDATA_USER_PRESENT | CTAP_AUTHDATA_USER_VERIFIED |	      \
+	 CTAP_AUTHDATA_ATT_CRED | CTAP_AUTHDATA_EXT_DATA)
 
 /* CTAPHID command opcodes. */
 #define CTAP_CMD_PING			0x01

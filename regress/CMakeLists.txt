@@ -43,6 +43,7 @@ else()
 endif()
 
 add_regress_test(regress_assert SOURCES assert.c LIBS ${_FIDO2_LIBRARY})
+add_regress_test(regress_authdata SOURCES authdata.c LIBS ${_FIDO2_LIBRARY})
 add_regress_test(regress_cred SOURCES cred.c mock.c LIBS ${_FIDO2_LIBRARY})
 add_regress_test(regress_dev SOURCES dev.c mock.c LIBS ${_FIDO2_LIBRARY})
 add_regress_test(regress_eddsa SOURCES eddsa.c LIBS ${_FIDO2_LIBRARY})

@@ -1135,7 +1135,7 @@ decode_attcred(const unsigned char **buf, size_t *len, int cose_alg,
 
 	if (fido_buf_read(buf, len, attcred->id.ptr, attcred->id.len) < 0) {
 		fido_log_debug("%s: fido_buf_read id", __func__);
-		return (-1);
+		goto fail;
 	}
 
 	if ((item = cbor_load(*buf, *len, &cbor)) == NULL) {
@@ -1161,6 +1161,13 @@ decode_attcred(const unsigned char **buf, size_t *len, int cose_alg,
 fail:
 	if (item != NULL)
 		cbor_decref(&item);
+
+	if (ok < 0) {
+		fido_blob_reset(&attcred->id);
+		memset(&attcred->aaguid, 0, sizeof(attcred->aaguid));
+		memset(&attcred->pubkey, 0, sizeof(attcred->pubkey));
+		attcred->type = 0;
+	}
 
 	return (ok);
 }
@@ -1399,6 +1406,7 @@ cbor_decode_cred_authdata(const cbor_item_t *item, int cose_alg,
 	const unsigned char	*buf = NULL;
 	size_t			 len;
 	size_t			 alloc_len;
+	int			 ok = -1;
 
 	if (cbor_isa_bytestring(item) == false ||
 	    cbor_bytestring_is_definite(item) == false) {
@@ -1419,26 +1427,58 @@ cbor_decode_cred_authdata(const cbor_item_t *item, int cose_alg,
 
 	if (fido_buf_read(&buf, &len, authdata, sizeof(*authdata)) < 0) {
 		fido_log_debug("%s: fido_buf_read", __func__);
-		return (-1);
+		goto fail;
 	}
 
 	authdata->sigcount = be32toh(authdata->sigcount);
 
+	/* reject reserved flag bits: the flags byte must only carry bits
+	 * defined by the CTAP specification. */
+	if ((authdata->flags & ~CTAP_AUTHDATA_FLAGS_MASK) != 0) {
+		fido_log_debug("%s: invalid flags=0x%02x", __func__,
+		    authdata->flags);
+		goto fail;
+	}
+
 	if (attcred != NULL) {
 		if ((authdata->flags & CTAP_AUTHDATA_ATT_CRED) == 0 ||
-		    decode_attcred(&buf, &len, cose_alg, attcred) < 0)
-			return (-1);
+		    decode_attcred(&buf, &len, cose_alg, attcred) < 0) {
+			fido_log_debug("%s: decode_attcred", __func__);
+			goto fail;
+		}
 	}
 
 	if (authdata_ext != NULL) {
 		if ((authdata->flags & CTAP_AUTHDATA_EXT_DATA) != 0 &&
-		    decode_cred_extensions(&buf, &len, authdata_ext) < 0)
-			return (-1);
+		    decode_cred_extensions(&buf, &len, authdata_ext) < 0) {
+			fido_log_debug("%s: decode_cred_extensions", __func__);
+			goto fail;
+		}
 	}
 
-	/* XXX we should probably ensure that len == 0 at this point */
+	/* no trailing bytes are allowed once the whole authenticator data
+	 * payload has been consumed. */
+	if (len != 0) {
+		fido_log_debug("%s: trailing bytes (%zu)", __func__, len);
+		goto fail;
+	}
 
-	return (FIDO_OK);
+	ok = 0;
+fail:
+	if (ok < 0) {
+		fido_blob_reset(authdata_cbor);
+		memset(authdata, 0, sizeof(*authdata));
+		if (attcred != NULL) {
+			fido_blob_reset(&attcred->id);
+			memset(attcred, 0, sizeof(*attcred));
+		}
+		if (authdata_ext != NULL) {
+			fido_blob_reset(&authdata_ext->hmac_secret_enc);
+			memset(authdata_ext, 0, sizeof(*authdata_ext));
+		}
+	}
+
+	return (ok);
 }
 
 int
@@ -1448,6 +1488,7 @@ cbor_decode_assert_authdata(const cbor_item_t *item, fido_blob_t *authdata_cbor,
 	const unsigned char	*buf = NULL;
 	size_t			 len;
 	size_t			 alloc_len;
+	int			 ok = -1;
 
 	if (cbor_isa_bytestring(item) == false ||
 	    cbor_bytestring_is_definite(item) == false) {
@@ -1469,22 +1510,47 @@ cbor_decode_assert_authdata(const cbor_item_t *item, fido_blob_t *authdata_cbor,
 
 	if (fido_buf_read(&buf, &len, authdata, sizeof(*authdata)) < 0) {
 		fido_log_debug("%s: fido_buf_read", __func__);
-		return (-1);
+		goto fail;
 	}
 
 	authdata->sigcount = be32toh(authdata->sigcount);
+
+	/* reject reserved flag bits: the flags byte must only carry bits
+	 * defined by the CTAP specification. */
+	if ((authdata->flags & ~CTAP_AUTHDATA_FLAGS_MASK) != 0) {
+		fido_log_debug("%s: invalid flags=0x%02x", __func__,
+		    authdata->flags);
+		goto fail;
+	}
 
 	if ((authdata->flags & CTAP_AUTHDATA_EXT_DATA) != 0) {
 		if (decode_assert_extensions(&buf, &len, authdata_ext) < 0) {
 			fido_log_debug("%s: decode_assert_extensions",
 			    __func__);
-			return (-1);
+			goto fail;
 		}
 	}
 
-	/* XXX we should probably ensure that len == 0 at this point */
+	/* no trailing bytes are allowed once the whole authenticator data
+	 * payload has been consumed. */
+	if (len != 0) {
+		fido_log_debug("%s: trailing bytes (%zu)", __func__, len);
+		goto fail;
+	}
 
-	return (FIDO_OK);
+	ok = 0;
+fail:
+	if (ok < 0) {
+		fido_blob_reset(authdata_cbor);
+		memset(authdata, 0, sizeof(*authdata));
+		if (authdata_ext != NULL) {
+			fido_blob_reset(&authdata_ext->hmac_secret_enc);
+			fido_blob_reset(&authdata_ext->blob);
+			memset(authdata_ext, 0, sizeof(*authdata_ext));
+		}
+	}
+
+	return (ok);
 }
 
 static int
