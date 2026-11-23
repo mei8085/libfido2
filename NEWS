@@ -1,3 +1,9 @@
+* Version 1.18.0 (unreleased)
+ ** fido_cred_verify, fido_cred_verify_self: bind the fido-u2f
+    attestation format to ES256 credentials; a credential of any other
+    COSE algorithm is now rejected with FIDO_ERR_INVALID_ARGUMENT
+    instead of having only a prefix of its public key attested.
+
 * Version 1.17.0 (2026-04-15)
  ** Added CTAP 2.3 support.
  ** Restrict webauthn.dll search paths; YSA-2026-01.

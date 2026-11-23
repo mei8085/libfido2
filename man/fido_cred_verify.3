@@ -97,6 +97,24 @@ is
 .Em Self Attestation .
 .Pp
 Other attestation formats and types are not supported.
+.Pp
+The
+.Em fido-u2f
+format is defined for ES256 credentials only: its signed payload
+covers the credential's P-256 public key in full.
+A credential of any other COSE algorithm, or an attestation statement
+whose
+.Em alg
+entry names an algorithm other than ES256, is therefore rejected with
+.Dv FIDO_ERR_INVALID_ARGUMENT .
+This verdict is distinguishable from
+.Dv FIDO_ERR_INVALID_SIG ,
+which is returned when an otherwise well-formed
+.Em fido-u2f
+attestation simply fails to verify.
+An attestation statement that omits the
+.Em alg
+entry is treated as ES256, for backwards compatibility.
 .Sh RETURN VALUES
 The error codes returned by
 .Fn fido_cred_verify

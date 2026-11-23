@@ -296,16 +296,63 @@ fido_check_rp_id(const char *id, const unsigned char *obtained_hash)
 	    SHA256_DIGEST_LENGTH));
 }
 
+/*
+ * The fido-u2f attestation format is defined for ES256 credentials only.
+ * The signed blob is  0x00 || rpIdHash || clientDataHash || credentialId ||
+ * 0x04 || x || y, i.e. exactly the P-256 public key.  If a credential of
+ * another COSE algorithm were accepted under this format, the blob would
+ * cover only the leading bytes of the credential's public key union member
+ * (zero padding, or a prefix of a larger key), leaving the unattested
+ * remainder free to be replaced once the attestation signature had been
+ * obtained.
+ *
+ * The algorithm named in the attestation statement is bound the same way:
+ * a fido-u2f attestation statement is an ES256 signature.  Callers that hit
+ * this check get FIDO_ERR_INVALID_ARGUMENT, which is distinguishable from
+ * a plain signature mismatch (FIDO_ERR_INVALID_SIG).  When the statement
+ * carries no algorithm, the historical ES256 default is preserved.
+ */
+static int
+check_u2f_fmt(const fido_cred_t *cred)
+{
+	if (strcmp(cred->fmt, "fido-u2f") != 0)
+		return (0);
+
+	if (cred->attcred.type != COSE_ES256) {
+		fido_log_debug("%s: unsupported credential alg %d", __func__,
+		    cred->attcred.type);
+		return (-1);
+	}
+
+	if (cred->attstmt.alg != COSE_UNSPEC &&
+	    cred->attstmt.alg != COSE_ES256) {
+		fido_log_debug("%s: unsupported attestation alg %d", __func__,
+		    cred->attstmt.alg);
+		return (-1);
+	}
+
+	return (0);
+}
+
 static int
 get_signed_hash_u2f(fido_blob_t *dgst, const unsigned char *rp_id,
     size_t rp_id_len, const fido_blob_t *clientdata, const fido_blob_t *id,
-    const es256_pk_t *pk)
+    const fido_attcred_t *attcred)
 {
 	const uint8_t	 zero = 0;
 	const uint8_t	 four = 4; /* uncompressed point */
 	const EVP_MD	*md = NULL;
 	EVP_MD_CTX	*ctx = NULL;
+	const es256_pk_t *pk = NULL;
 	int		 ok = -1;
+
+	/* refuse to hash a partially covered key; cf. check_u2f_fmt() */
+	if (attcred->type != COSE_ES256) {
+		fido_log_debug("%s: unsupported credential alg %d", __func__,
+		    attcred->type);
+		return (-1);
+	}
+	pk = &attcred->pubkey.es256;
 
 	if (dgst->len < SHA256_DIGEST_LENGTH ||
 	    (md = EVP_sha256()) == NULL ||
@@ -435,6 +482,12 @@ fido_cred_verify(const fido_cred_t *cred)
 		goto out;
 	}
 
+	if (check_u2f_fmt(cred) < 0) {
+		fido_log_debug("%s: check_u2f_fmt", __func__);
+		r = FIDO_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
+
 	if ((cose_alg = cred->attstmt.alg) == COSE_UNSPEC)
 		cose_alg = COSE_ES256; /* backwards compat */
 
@@ -448,7 +501,7 @@ fido_cred_verify(const fido_cred_t *cred)
 	} else if (!strcmp(cred->fmt, "fido-u2f")) {
 		if (get_signed_hash_u2f(&dgst, cred->authdata.rp_id_hash,
 		    sizeof(cred->authdata.rp_id_hash), &cred->cdh,
-		    &cred->attcred.id, &cred->attcred.pubkey.es256) < 0) {
+		    &cred->attcred.id, &cred->attcred) < 0) {
 			fido_log_debug("%s: get_signed_hash_u2f", __func__);
 			r = FIDO_ERR_INTERNAL;
 			goto out;
@@ -524,6 +577,12 @@ fido_cred_verify_self(const fido_cred_t *cred)
 		goto out;
 	}
 
+	if (check_u2f_fmt(cred) < 0) {
+		fido_log_debug("%s: check_u2f_fmt", __func__);
+		r = FIDO_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
+
 	if (!strcmp(cred->fmt, "packed")) {
 		if (fido_get_signed_hash(cred->attcred.type, &dgst, &cred->cdh,
 		    &cred->authdata_cbor) < 0) {
@@ -534,7 +593,7 @@ fido_cred_verify_self(const fido_cred_t *cred)
 	} else if (!strcmp(cred->fmt, "fido-u2f")) {
 		if (get_signed_hash_u2f(&dgst, cred->authdata.rp_id_hash,
 		    sizeof(cred->authdata.rp_id_hash), &cred->cdh,
-		    &cred->attcred.id, &cred->attcred.pubkey.es256) < 0) {
+		    &cred->attcred.id, &cred->attcred) < 0) {
 			fido_log_debug("%s: get_signed_hash_u2f", __func__);
 			r = FIDO_ERR_INTERNAL;
 			goto out;
